@@ -1,5 +1,55 @@
 # Class-Agnostic Counting
 
+A fork of the [class-agnostic-counting](https://github.com/erikalu/class-agnostic-counting) specialised 
+for counting portulaca flower.
+
+## Dataset
+
+The dataset we have used for this can be found in `data/flowers/`
+- `data/flowers/Images` contains the original images
+- `data/flowers/image1` contains labeled image for flower 1 that can be used for training this model
+- `data/flowers/image2` contains labeled image for flower 2 that can be used for training this model
+
+The adapting(or training) and validation split can be found in `meta/flowers?.npz`. Images with id greater than 14 are used for validation.
+To play with the dataset, see `data play.ipynb`.
+
+## Usage
+
+### Environment 
+```
+
+# build docker container with <name>
+docker build -t <name> .
+
+# run the docker container
+nvidia-docker run --ipc=host -p 4242:4242 -v $PWD:/app <ip> bash 
+
+```
+
+### Predict 
+
+For flower 1: 
+```
+python3 src/predict.py  --dataset flowers2 --ex_img data/flower2_ex_patch.png --gmn_path models/flowers2.h5 --in_img_dir data/flowers/Images/ --gpu "1"
+```
+
+For flower 2:
+```
+python3 src/predict.py  --dataset flowers1 --ex_img data/flower1_ex_patch.png --gmn_path models/flowers1.h5 --in_img_dir data/flowers/Images/ --gpu "1" 
+```
+
+### Train
+```
+python3 src/main.py --mode adapt --dataset flowers2 --data_path data/flowers/ --gmn_path meta/pretrained_gmn.h5 --gpu 0 --batch_size 4
+
+OR 
+
+python3 src/main.py --mode adapt --dataset flowers1 --data_path data/flowers/ --gmn_path meta/pretrained_gmn.h5 --gpu 0 --batch_size 4
+```
+It uses the datasplit or the files listed in `meta/flowers2.npz` or `meta/flowers1.npz`; and images `data/flowers/image2` respectivelu
+
+## Orignal Documentation 
+
 This repo contains a Keras implementation of the paper,     [Class-Agnostic Counting (Lu et al., ACCV 2018)](https://arxiv.org/abs/1811.00472). It includes code for training the GMN (Generic Matching Network) and adapting it to specific datasets.
  
 ### Dependencies

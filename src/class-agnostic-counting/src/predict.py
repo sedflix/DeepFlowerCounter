@@ -1,6 +1,7 @@
 import argparse
 import math
 import os
+import json
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -80,11 +81,6 @@ def get_model():
     return gmn
 
 
-def save_result(name, out):
-    out = np.squeeze(out, axis=0)
-    out = np.squeeze(out, axis=2)
-    number_of_flowers = math.ceil(np.sum(out / 100))
-    plt.imsave(os.path.join(args.output_path, args.dataset + "_" + str(number_of_flowers) + "_" + name), out)
 
 
 if __name__ == '__main__':
@@ -101,8 +97,9 @@ if __name__ == '__main__':
 
     # iterate over each image in the input image folder and predict the result
     input_images_list = os.listdir(args.in_img_dir)
+    counts  = {}
     for input_img_name in input_images_list:
-        print("predicting for %s " % input_img_name)
+        print("predict: %s " % input_img_name, end=" ")
         input_img = ut.load_data(os.path.join(args.in_img_dir, input_img_name), dims=trn_config.imgdims,
                                  pad=trn_config.pad)
 
@@ -114,7 +111,19 @@ if __name__ == '__main__':
         inputs = {'image_patch': ex_patch, 'image': input_img}
 
         # predict
-        outputs = model.predict(inputs, batch_size=1)
+        out = model.predict(inputs, batch_size=1)
 
         # save the model
-        save_result(input_img_name, outputs)
+        out = np.squeeze(out, axis=0)
+        out = np.squeeze(out, axis=2)
+        number_of_flowers = math.ceil(np.sum(out / 100))
+        plt.imsave(os.path.join(args.output_path, args.dataset + "_" + str(number_of_flowers) + "_" + input_img_name), out)
+        counts[input_img_name] = number_of_flowers
+        print(number_of_flowers)
+
+    with open(os.path.join(args.output_path, args.dataset + ".json"), 'w') as f:
+        json.dump(counts, f)
+    print(counts)
+
+
+
