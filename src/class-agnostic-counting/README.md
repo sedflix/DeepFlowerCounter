@@ -46,9 +46,11 @@ OR
 
 python3 src/main.py --mode adapt --dataset flowers1 --data_path data/flowers/ --gmn_path meta/pretrained_gmn.h5 --gpu 0 --batch_size 4
 ```
-It uses the datasplit or the files listed in `meta/flowers2.npz` or `meta/flowers1.npz`; and images `data/flowers/image2` respectivelu
 
-## Orignal Documentation 
+It uses files listed in `meta/flowers2.npz` or `meta/flowers1.npz`; images in `data/flowers/image2` or `data/flowers/image1` as labels; and images in `data/flowers/Images` as input images.
+
+
+## Original Documentation 
 
 This repo contains a Keras implementation of the paper,     [Class-Agnostic Counting (Lu et al., ACCV 2018)](https://arxiv.org/abs/1811.00472). It includes code for training the GMN (Generic Matching Network) and adapting it to specific datasets.
  
