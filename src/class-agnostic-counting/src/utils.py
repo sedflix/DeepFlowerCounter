@@ -23,7 +23,7 @@ def set_path(args):
                                            '_{args.optimizer}_lr{args.lr}_bs{args.batch_size}'.format(date, args=args))
     else:
         exp_path = os.path.join(args.mode, args.gmn_path.split(os.sep)[-2])
-    model_path = os.path.join('models', exp_path)
+    model_path = os.path.join('models', args.name, exp_path)
     log_path = os.path.join('logs', exp_path)
     if not os.path.exists(model_path): os.makedirs(model_path)
     if not os.path.exists(log_path): os.makedirs(log_path)

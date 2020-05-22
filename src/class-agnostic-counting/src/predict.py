@@ -88,6 +88,8 @@ if __name__ == '__main__':
 
     # load model
     model = get_model()
+    if not os.path.exists(args.output_path):
+        os.mkdir(args.output_path)
 
     # load object image
     ex_patch = ut.load_data(args.ex_img, dims=trn_config.patchdims, pad=trn_config.pad)

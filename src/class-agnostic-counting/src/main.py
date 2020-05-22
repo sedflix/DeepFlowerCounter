@@ -25,6 +25,7 @@ parser.add_argument('--batch_size', default=24, type=int)
 parser.add_argument('--data_path', default='', type=str)
 parser.add_argument('--epochs', default=36, type=int,
                     help='number of total epochs to run')
+parser.add_argument('--name', type=str, help="name of the experiment")
 
 global args
 args = parser.parse_args()
