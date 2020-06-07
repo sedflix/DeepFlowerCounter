@@ -1,8 +1,85 @@
 import os
 import random
+
+import imgaug as ia
+import imgaug.augmenters as iaa
 import numpy as np
 import scipy.ndimage
 import skimage.measure
+from imgaug.augmentables.heatmaps import HeatmapsOnImage
+
+sometimes = lambda aug: iaa.Sometimes(0.5, aug)
+
+seq = iaa.Sequential(
+    [
+        # apply the following augmenters to most images
+        iaa.Fliplr(0.5),  # horizontally flip 50% of all images
+        iaa.Flipud(0.2),  # vertically flip 20% of all images
+
+        # crop images by -5% to 10% of their height/width
+        sometimes(iaa.CropAndPad(
+            percent=(-0.01, 0.1),
+            pad_mode=ia.ALL,
+            pad_cval=(0, 255)
+        )),
+
+        sometimes(iaa.Affine(
+            scale={"x": (0.5, 1.5), "y": (0.5, 1.5)},  # scale images to 80-120% of their size, individually per axis
+            translate_percent={"x": (-0.2, 0.2), "y": (-0.2, 0.2)},  # translate by -20 to +20 percent (per axis)
+            rotate=(-25, 25),  # rotate by -45 to +45 degrees
+            shear=(-5, 5),  # shear by -16 to +16 degrees
+            order=[0, 1],  # use nearest neighbour or bilinear interpolation (fast)
+            cval=(0, 255),  # if mode is constant, use a cval between 0 and 255
+            mode=ia.ALL  # use any of scikit-image's warping modes (see 2nd image from the top for examples)
+        )),
+        # execute 0 to 5 of the following (less important) augmenters per image
+        # don't execute all of them, as that would often be way too strong
+        iaa.SomeOf((0, 5),
+                   [
+                       #                 sometimes(iaa.Superpixels(p_replace=(0, 1.0), n_segments=(20, 200))), # convert images into their superpixel representation
+                       #                 iaa.OneOf([
+                       #                     iaa.GaussianBlur((0, 3.0)), # blur images with a sigma between 0 and 3.0
+                       #                     iaa.AverageBlur(k=(2, 7)), # blur image using local means with kernel sizes between 2 and 7
+                       #                     iaa.MedianBlur(k=(3, 11)), # blur image using local medians with kernel sizes between 2 and 7
+                       #                 ]),
+                       #                 iaa.Sharpen(alpha=(0, 1.0), lightness=(0.75, 1.5)), # sharpen images
+                       #                 iaa.Emboss(alpha=(0, 1.0), strength=(0, 2.0)), # emboss images
+                       #                 # search either for all edges or for directed edges,
+                       #                 # blend the result with the original image using a blobby mask
+                       #                 iaa.SimplexNoiseAlpha(iaa.OneOf([
+                       #                     iaa.EdgeDetect(alpha=(0.5, 1.0)),
+                       #                     iaa.DirectedEdgeDetect(alpha=(0.5, 1.0), direction=(0.0, 1.0)),
+                       #                 ])),
+                       #                 iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05*255), per_channel=0.5), # add gaussian noise to images
+                       #                 iaa.OneOf([
+                       #                     iaa.Dropout((0.01, 0.1), per_channel=0.5), # randomly remove up to 10% of the pixels
+                       #                     iaa.CoarseDropout((0.03, 0.15), size_percent=(0.02, 0.05), per_channel=0.2),
+                       #                 ]),
+                       #                 iaa.Invert(0.05, per_channel=True), # invert color channels
+                       iaa.Add((-10, 10), per_channel=0.5),
+                       # change brightness of images (by -10 to 10 of original value)
+                       iaa.AddToHueAndSaturation((-20, 20)),  # change hue and saturation
+                       # either change the brightness of the whole image (sometimes
+                       # per channel) or change the brightness of subareas
+                       iaa.OneOf([
+                           iaa.Multiply((0.5, 1.5), per_channel=0.5),
+                           iaa.FrequencyNoiseAlpha(
+                               exponent=(-4, 0),
+                               first=iaa.Multiply((0.5, 1.5), per_channel=True),
+                               second=iaa.LinearContrast((0.5, 2.0))
+                           )
+                       ]),
+                       iaa.LinearContrast((0.5, 2.0), per_channel=0.5),  # improve or worsen the contrast
+                       sometimes(iaa.ElasticTransformation(alpha=(0.5, 3.5), sigma=0.25)),
+                       # move pixels locally around (with random strengths)
+                       sometimes(iaa.PiecewiseAffine(scale=(0.01, 0.05))),  # sometimes move parts of the image around
+                       sometimes(iaa.PerspectiveTransform(scale=(0.01, 0.1)))
+                   ],
+                   random_order=True
+                   )
+    ],
+    random_order=True
+)
 
 
 def initialize_GPU(args):
@@ -52,6 +129,7 @@ def step_decay(args):
                 break
         print('Learning rate for epoch {} is {}.'.format(epoch + 1, lr))
         return np.float(lr)
+
     return step_decay_fn
 
 
@@ -81,9 +159,9 @@ def flip_axis(array, axis):
 
 
 def affine_transform_Image(img, matrix, offset):
-    #padX = [img.shape[1] - pivot[0], pivot[0]]
-    #padY = [img.shape[0] - pivot[1], pivot[1]]
-    #imgP = np.pad(img, [padY, padX, [0,0]], 'reflect')
+    # padX = [img.shape[1] - pivot[0], pivot[0]]
+    # padY = [img.shape[0] - pivot[1], pivot[1]]
+    # imgP = np.pad(img, [padY, padX, [0,0]], 'reflect')
     imgR = scipy.ndimage.affine_transform(img, matrix, offset=offset, mode='nearest', order=5)
     return imgR
 
@@ -94,12 +172,12 @@ def affine_image_with_python(img, target_shape=None, xy=np.array([0.0, 0.0]), rt
     rt_mat = np.array([np.cos(rt), np.sin(rt), -np.sin(rt), np.cos(rt)])
     zm_mat = np.array([zm, zm, zm, zm])
     transform_mat = np.reshape((xy_mat * rt_mat) * zm_mat, (2, 2))
-    c_in = 0.5*np.array(img.shape[:2])
+    c_in = 0.5 * np.array(img.shape[:2])
     c_out = c_in
     offset = c_in - c_out.dot(transform_mat)
-    trans_img_c0 = affine_transform_Image(img[:, :, 0], transform_mat.T, offset=offset+xy*(target_shape[:2]//2))
-    trans_img_c1 = affine_transform_Image(img[:, :, 1], transform_mat.T, offset=offset+xy*(target_shape[:2]//2))
-    trans_img_c2 = affine_transform_Image(img[:, :, 2], transform_mat.T, offset=offset+xy*(target_shape[:2]//2))
+    trans_img_c0 = affine_transform_Image(img[:, :, 0], transform_mat.T, offset=offset + xy * (target_shape[:2] // 2))
+    trans_img_c1 = affine_transform_Image(img[:, :, 1], transform_mat.T, offset=offset + xy * (target_shape[:2] // 2))
+    trans_img_c2 = affine_transform_Image(img[:, :, 2], transform_mat.T, offset=offset + xy * (target_shape[:2] // 2))
     trans_img = np.stack((trans_img_c0, trans_img_c1, trans_img_c2), -1)
     return trans_img
 
@@ -112,14 +190,14 @@ def load_data(imgpath, dims=None, pad=0, normalize=False):
     '''
     img = scipy.misc.imread(imgpath, mode='RGB')
     if normalize:
-        img = img/255.
+        img = img / 255.
     if dims:
-        imgdims = (dims[0]-pad*2, dims[1]-pad*2, dims[2])
+        imgdims = (dims[0] - pad * 2, dims[1] - pad * 2, dims[2])
         img = scipy.misc.imresize(img, (imgdims[0], imgdims[1]))
         if pad:
             padded_im = np.zeros(dims)
             padded_im[:] = np.mean(img, axis=(0, 1))
-            padded_im[pad:imgdims[0]-pad, pad:imgdims[1]-pad, :] = img
+            padded_im[pad:imgdims[0] - pad, pad:imgdims[1] - pad, :] = img
 
     return img
 
@@ -138,16 +216,16 @@ def load_dotlabel(lbpath, imgdims, pad=0):
     coords = np.column_stack(np.where(lb == 1))
     new_lb = np.zeros((imgdims[0], imgdims[1]), dtype='float32')
 
-    zx = (imgdims[0]-2*pad)/lb.shape[0]
-    zy = (imgdims[1]-2*pad)/lb.shape[1]
+    zx = (imgdims[0] - 2 * pad) / lb.shape[0]
+    zy = (imgdims[1] - 2 * pad) / lb.shape[1]
 
     for c in range(coords.shape[0]):
-        new_lb[pad+int(coords[c,0]*zx),pad+int(coords[c, 1]*zy)] = 1
+        new_lb[pad + int(coords[c, 0] * zx), pad + int(coords[c, 1] * zy)] = 1
 
     return new_lb
 
 
-def sample_exemplar(inputs, patchdims, augment):
+def sample_exemplar(inputs, patchdims, augment=True):
     '''
     Samples an exemplar patch from an input image.
     Args:
@@ -157,15 +235,26 @@ def sample_exemplar(inputs, patchdims, augment):
         patchdims: desired size of exemplar patch
         augment: whether to do data augmentation on patch
     '''
-    img,lb = inputs
+    img, lb = inputs
     imgdims = img.shape
+
+    output_map = max_pooling(lb, (4, 4))  # resize to output size
+    output_map = 100 * scipy.ndimage.gaussian_filter(
+        output_map, sigma=(2, 2), mode='constant')
+
+    if True:
+        img, heatmap = seq(images=[img], heatmaps=[HeatmapsOnImage(output_map, shape=img.shape)])
+        img = img[0]
+        heatmap = heatmap[0].get_arr()
+        if len(heatmap.shape) == 3:
+            lb = heatmap[:, :, 0]
 
     # get coordinates of potential exemplars
     coords = np.column_stack(np.where(lb == 1.0))
     valid_coords = np.array([c for c in coords
-                             if (c[0] > patchdims[0]//2) and c[1] > (patchdims[1]//2)
-                             and c[0] < (imgdims[0] - patchdims[0]//2)
-                             and c[1] < (imgdims[1] - patchdims[1]//2)])
+                             if (c[0] > patchdims[0] // 2) and c[1] > (patchdims[1] // 2)
+                             and c[0] < (imgdims[0] - patchdims[0] // 2)
+                             and c[1] < (imgdims[1] - patchdims[1] // 2)])
 
     if valid_coords.shape[0] == 0:
         # TODO: different way of handling this case
@@ -174,13 +263,9 @@ def sample_exemplar(inputs, patchdims, augment):
         lb[:] = 0
         lb[valid_coords[0][0], valid_coords[0][1]] = 1
 
-    patch_coords = valid_coords[random.randint(0, valid_coords.shape[0]-1)]
+    patch_coords = valid_coords[random.randint(0, valid_coords.shape[0] - 1)]
     ex_patch = img[patch_coords[0] - patchdims[0] // 2: patch_coords[0] + patchdims[0] // 2,
-                   patch_coords[1] - patchdims[1] // 2: patch_coords[1] + patchdims[1] // 2, ]
-
-    output_map = max_pooling(lb, (4, 4))  # resize to output size
-    output_map = 100 * scipy.ndimage.gaussian_filter(
-            output_map, sigma=(2, 2), mode='constant')
+               patch_coords[1] - patchdims[1] // 2: patch_coords[1] + patchdims[1] // 2, ]
 
     if augment:
         opt = {'xy': -0.05, 'rt': [1, 20], 'zm': [0.9, 1.1]}
@@ -214,6 +299,6 @@ def augment_data(img, opt={}, prob=.9):
 
 
 def multiprocess_fn(pool, fn, input_list, opts=[]):
-    results = [pool.apply_async(fn, args=(x,)+tuple(opts)) for x in input_list]
+    results = [pool.apply_async(fn, args=(x,) + tuple(opts)) for x in input_list]
     results = [p.get() for p in results]
     return results
