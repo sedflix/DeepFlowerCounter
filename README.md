@@ -1,3 +1,3 @@
-# flower-seg
+# DeepFlowerCounter
 
-Look at https://github.com/sedflix/flower-seg/tree/master/src/class-agnostic-counting
+Checkout https://github.com/sedflix/DeepFlowerCounter/tree/master/src/class-agnostic-counting for the DeepFlowerCounter
